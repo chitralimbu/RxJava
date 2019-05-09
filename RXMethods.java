@@ -1,12 +1,6 @@
 /*OnNext, OnError, OnCompleted*/
 All Credits to the code belong to: https://www.baeldung.com/rx-java
-import static org.junit.Assert.assertTrue;
-
-import java.util.Arrays;
-import java.util.List;
-
-import org.junit.Test;
-import rx.Observable;
+/*OnNext, OnError, OnCompleted*/
 
 public class RXMethods {
 	String result = "";
@@ -14,6 +8,8 @@ public class RXMethods {
 	private static String[] titles = {"title"};
 	private static List<String> titleList = Arrays.asList(titles);
 	private static Integer[] numbers = {0,1,2,3,4,5,6,7,8,9,10};
+	Integer subscriber1 = 0;
+	Integer subscriber2 = 0;
 	
 	@Test
 	public void testMethods() {
@@ -119,4 +115,119 @@ public class RXMethods {
 		assertTrue(sum[0] == 10);
 	}
 	
+	/*Connectable Observables -> resembles and ordinary Observable. It doesnt emit items when it is
+	 * subscribed to, but only when the connect operator applied to it. Can wait for all intended observers
+	 * to subscribe to the observable begins emitting items*/
+	
+	@Test
+	public void testConnectableObservable() throws InterruptedException {
+		String[] result = {""};
+		ConnectableObservable<Long> connectable = Observable.interval(200, TimeUnit.MILLISECONDS).publish();
+		connectable.subscribe(i -> result[0] += i);
+		assertFalse(result[0].equals("01"));
+		System.out.println("Array one: " + Arrays.asList(result));
+		connectable.connect();
+		Thread.sleep(500);
+		System.out.println("Array two: " + Arrays.asList(result));
+		assertTrue(result[0].equals("01"));
+	}
+	
+	/*Like an observable -> Instea dof emitting a series of values - emits one value or an error notification
+	 * OnSuccess 
+	 * OnError 
+	 * */
+	
+	@Test
+	public void testOnErrorSuccess() {
+		String[] result = {""};
+		Single<String> single = Observable.just("Hello")
+				.toSingle()
+				.doOnSuccess(i -> result[0] += i)
+				.doOnError(error -> {
+					throw new RuntimeException(error.getMessage());
+				});
+		single.subscribe();
+		
+		assertTrue(result[0].equals("Hello"));
+	}
+	
+	/*Subjects -> Simultaneously two elements. Subscriber and observable. 
+	 * As a subscriber, a subject can be used to publish the events coming from more than one
+	 * observable.*/
+	public Observer<Integer> getFirstObserver(){
+		return new Observer<Integer>() {
+			@Override
+			public void onNext(Integer value) {
+				subscriber1 += value;
+			}
+			
+			@Override
+			public void onError(Throwable e) {
+				System.out.println("Error");
+			}
+			
+			@Override
+			public void onCompleted() {
+				System.out.println("Subscriber2 completed");
+			}
+		};
+	}
+	
+	Observer<Integer> getSecondObserver(){
+		return new Observer<Integer>() {
+
+			@Override
+			public void onCompleted() {
+				System.out.println("Subscriber2 completed");	
+			}
+
+			@Override
+			public void onError(Throwable e) {
+				System.out.println("Error");	
+			}
+			
+			@Override
+			public void onNext(Integer value) {
+				subscriber2 += value;
+			}
+		};
+	}
+	
+	@Test
+	public void testSubject() {
+		PublishSubject<Integer> subject = PublishSubject.create(); 
+		subject.subscribe(getFirstObserver()); 
+		subject.onNext(1);
+		subject.onNext(2);
+		subject.onNext(3);
+		subject.subscribe(getSecondObserver());
+		subject.onNext(4);
+		subject.onCompleted();
+		assertTrue(subscriber1 + subscriber2 == 14);
+	}
+	
+	/*Resource Management: - Using operation: allows us to associate resources i.e. JDBC connection/network connection
+	 * to our observables.
+	 * */
+	@Test
+	public void testUsing() {
+		String[] result = {""};
+		Observable<Character> values = Observable.using(
+		  () -> "MyResource",
+		  r -> {
+		      return Observable.create(o -> {
+		          for (Character c : r.toCharArray()) {
+		              o.onNext(c);
+		          }
+		          o.onCompleted();
+		      });
+		  },
+		  r -> System.out.println("Disposed: " + r)
+		);
+		values.subscribe(
+		  v -> result[0] += v,
+		  e -> result[0] += e
+		);
+		assertTrue(result[0].equals("MyResource"));
+	}
 }
